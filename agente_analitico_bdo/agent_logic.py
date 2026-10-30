@@ -151,6 +151,50 @@ class AgenteAnaliticoEngine:
         if "país" in lower or "pais" in lower:
             return "", {}, {"tipo": "DimensionInexistente"}, "La dimensión 'País' no existe en el Data Mart de ventas."
 
+        if (
+            "ciudades" in lower
+            or "menor volumen" in lower
+            or "ingreso acumulado" in lower
+        ):
+            return "Q8_MENOR_INGRESO_CIUDAD", {}, {
+                "tipo": "MenorIngresoCiudad",
+                "metrica": "IngresoNeto",
+                "dimension": "DimSucursal",
+            }, None
+
+        if (
+            "segmento" in lower
+            and (
+                "margen bruto promedio" in lower
+                or "promedio por transacción" in lower
+                or "promedio por transaccion" in lower
+            )
+        ):
+            return "Q9_MARGEN_PROMEDIO_SEGMENTO", {}, {
+                "tipo": "MargenPromedioSegmento",
+                "metrica": "MargenBruto",
+                "dimension": "DimCliente",
+            }, None
+
+        if (
+            "categor" in lower
+            and any(term in lower for term in ("más vendida", "mas vendida", "unidades", "cantidad"))
+            and any(term in lower for term in ("e-commerce", "ecommerce", "online", "canal"))
+        ):
+            return "Q10_CATEGORIA_LIDER_UNIDADES_CANAL", {}, {
+                "tipo": "CategoriaLiderUnidadesCanal",
+                "metrica": "Cantidad",
+                "dimension": "DimProducto, DimCanal",
+            }, None
+
+        if "compar" in lower and "canal" in lower and "margen" in lower:
+            return "Q6_COMPARAR_MARGEN_CANALES", {}, {
+                "tipo": "Comparativa",
+                "metrica": "MargenBruto",
+                "dimension": "DimCanal",
+                "periodo": "Últimos tres meses disponibles",
+            }, None
+
         # Casos estándar del catálogo (P01 - P05, P10, P11)
         if "ingreso neto por mes" in lower or "ingreso por mes" in lower:
             return "Q1_INGRESO_NETO_POR_MES", {}, {"tipo": "EvolucionMensual", "metrica": "IngresoNeto", "dimension": "DimTiempo"}, None
@@ -166,9 +210,6 @@ class AgenteAnaliticoEngine:
 
         if "canal" in lower and "mayor" in lower:
             return "Q5_CANAL_MAYOR_VENTA", {}, {"tipo": "Ranking", "metrica": "IngresoNeto", "dimension": "DimCanal"}, None
-
-        if "compara" in lower and "canal" in lower:
-            return "Q6_COMPARAR_MARGEN_CANALES", {"mes_inicio": 1, "mes_fin": 6}, {"tipo": "Comparativa", "metrica": "MargenBruto", "dimension": "DimCanal", "periodo": "Ene-Jun"}, None
 
         if "automotriz" in lower:
             return "Q7_PRODUCTO_LIDER_CATEGORIA", {"categoria": "Automotriz"}, {"tipo": "Liderazgo", "metrica": "IngresoNeto", "dimension": "DimProducto"}, None
@@ -187,8 +228,46 @@ class AgenteAnaliticoEngine:
                 "Advertencia: Resultado vacío (0 registros). No se asume cero como dato real."
             )
 
-        filas = len(datos)
-        texto = f"Se obtuvieron {filas} registros procesados desde el Data Mart."
+        tipo = intencion.get("tipo")
+        if tipo == "MenorIngresoCiudad":
+            ciudades = [
+                f'{fila["Ciudad"]} ({float(fila["IngresoNetoAcumulado"]):.2f})'
+                for fila in datos
+            ]
+            texto = (
+                f"Las {len(ciudades)} ciudades con menor ingreso neto acumulado son: "
+                f"{', '.join(ciudades)}."
+            )
+        elif tipo == "MargenPromedioSegmento":
+            segmentos = [
+                f'{fila["Segmento"]} '
+                f'({float(fila["MargenPromedioPorTransaccion"]):.2f})'
+                for fila in datos
+            ]
+            texto = (
+                "El margen bruto promedio por transacción por segmento es: "
+                f"{', '.join(segmentos)}."
+            )
+        elif tipo == "CategoriaLiderUnidadesCanal":
+            fila = datos[0]
+            unidades = float(fila["UnidadesVendidas"])
+            unidades_formateadas = (
+                str(int(unidades)) if unidades.is_integer() else f"{unidades:g}"
+            )
+            texto = (
+                "La categoría más vendida en unidades en el canal E-Commerce es "
+                f'{fila["Categoria"]} con {unidades_formateadas} unidades.'
+            )
+        else:
+            registros = [
+                ", ".join(f"{campo}: {valor}" for campo, valor in fila.items())
+                for fila in datos
+            ]
+            texto = (
+                f"Resultados de la consulta ({len(datos)} registros): "
+                f"{'; '.join(registros)}."
+            )
+
         interpretacion = f"Análisis de {intencion.get('tipo', 'Consulta')} sobre la métrica {intencion.get('metrica', 'General')}."
         advertencia = "Datos verificados contra el Data Mart oficial."
 

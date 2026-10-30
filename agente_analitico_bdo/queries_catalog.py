@@ -107,6 +107,13 @@ QUERIES: dict[str, QueryDefinition] = {
         identificador="Q6_COMPARAR_MARGEN_CANALES",
         descripcion="Comparativa de margen bruto e ingreso entre canales en un rango de meses",
         sql=(
+            'WITH ultimos_periodos AS ('
+            'SELECT DISTINCT t."Año", t."Mes" '
+            'FROM "FactVentas" fv '
+            'JOIN "DimTiempo" t ON fv."TiempoSK" = t."TiempoSK" '
+            'ORDER BY t."Año" DESC, t."Mes" DESC '
+            'LIMIT 3'
+            ') '
             'SELECT cn."NombreCanal", '
             'SUM(f."MargenBruto") AS "MargenBrutoTotal", '
             'SUM(f."IngresoNeto") AS "IngresoNetoTotal", '
@@ -114,7 +121,7 @@ QUERIES: dict[str, QueryDefinition] = {
             'FROM "FactVentas" f '
             'JOIN "DimCanal" cn ON f."CanalSK" = cn."CanalSK" '
             'JOIN "DimTiempo" t ON f."TiempoSK" = t."TiempoSK" '
-            'WHERE t."Mes" BETWEEN :mes_inicio AND :mes_fin '
+            'JOIN ultimos_periodos up ON t."Año" = up."Año" AND t."Mes" = up."Mes" '
             'GROUP BY cn."NombreCanal" '
             'ORDER BY "MargenBrutoTotal" DESC;'
         ),
@@ -133,6 +140,51 @@ QUERIES: dict[str, QueryDefinition] = {
             'WHERE UPPER(p."Categoria") = UPPER(:categoria) '
             'GROUP BY p."NombreProducto", p."Categoria" '
             'ORDER BY "VentaTotal" DESC '
+            'LIMIT 1;'
+        ),
+    ),
+
+    # 8. ADI1: ¿Cuáles son las tres ciudades con menor volumen de ingreso neto acumulado?
+    "Q8_MENOR_INGRESO_CIUDAD": QueryDefinition(
+        identificador="Q8_MENOR_INGRESO_CIUDAD",
+        descripcion="Top 3 ciudades con menor ingreso neto acumulado",
+        sql=(
+            'SELECT s."Ciudad", SUM(f."IngresoNeto") AS "IngresoNetoAcumulado" '
+            'FROM "FactVentas" f '
+            'JOIN "DimSucursal" s ON f."SucursalSK" = s."SucursalSK" '
+            'GROUP BY s."Ciudad" '
+            'ORDER BY "IngresoNetoAcumulado" ASC '
+            'LIMIT 3;'
+        ),
+    ),
+
+    # 9. ADI2: ¿Cuál es el margen bruto promedio por transacción según el segmento de cliente?
+    "Q9_MARGEN_PROMEDIO_SEGMENTO": QueryDefinition(
+        identificador="Q9_MARGEN_PROMEDIO_SEGMENTO",
+        descripcion="Margen bruto promedio por transacción según el segmento de cliente",
+        sql=(
+            'SELECT c."Segmento", '
+            'ROUND(SUM(f."MargenBruto") / NULLIF(COUNT(DISTINCT f."NumeroTransaccion"), 0), 2) AS "MargenPromedioPorTransaccion" '
+            'FROM "FactVentas" f '
+            'JOIN "DimCliente" c ON f."ClienteSK" = c."ClienteSK" '
+            'GROUP BY c."Segmento" '
+            'ORDER BY "MargenPromedioPorTransaccion" DESC;'
+        ),
+    ),
+
+    # 10. ADI3: ¿Cuál es la categoría de producto más vendida en unidades a través del canal 'E-Commerce'?
+    "Q10_CATEGORIA_LIDER_UNIDADES_CANAL": QueryDefinition(
+        identificador="Q10_CATEGORIA_LIDER_UNIDADES_CANAL",
+        descripcion="Categoría de producto más vendida en unidades a través del canal digital",
+        sql=(
+            'SELECT p."Categoria", SUM(f."Cantidad") AS "UnidadesVendidas" '
+            'FROM "FactVentas" f '
+            'JOIN "DimProducto" p ON f."ProductoSK" = p."ProductoSK" '
+            'JOIN "DimCanal" cn ON f."CanalSK" = cn."CanalSK" '
+            "WHERE UPPER(cn.\"NombreCanal\") LIKE '%E-COMMERCE%' "
+            "OR UPPER(cn.\"NombreCanal\") LIKE '%ONLINE%' "
+            'GROUP BY p."Categoria" '
+            'ORDER BY "UnidadesVendidas" DESC '
             'LIMIT 1;'
         ),
     ),
